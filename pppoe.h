@@ -51,6 +51,10 @@ extern int IsSetID;
 #include <sys/socket.h>
 #endif
 
+#ifdef HAVE_STDINT_H
+#include <stdint.h>
+#endif
+
 /* Ugly header files on some Linux boxes... */
 #if defined(HAVE_LINUX_IF_H)
 #include <linux/if.h>
@@ -108,25 +112,6 @@ void sessionDiscoveryPacket(struct PPPoEPacketStruct *packet);
 
 #endif
 
-/* Define various integer types -- assumes a char is 8 bits */
-#if SIZEOF_UNSIGNED_SHORT == 2
-typedef unsigned short UINT16_t;
-#elif SIZEOF_UNSIGNED_INT == 2
-typedef unsigned int UINT16_t;
-#else
-#error Could not find a 16-bit integer type
-#endif
-
-#if SIZEOF_UNSIGNED_SHORT == 4
-typedef unsigned short UINT32_t;
-#elif SIZEOF_UNSIGNED_INT == 4
-typedef unsigned int UINT32_t;
-#elif SIZEOF_UNSIGNED_LONG == 4
-typedef unsigned long UINT32_t;
-#else
-#error Could not find a 32-bit integer type
-#endif
-
 #ifdef HAVE_LINUX_IF_ETHER_H
 #include <linux/if_ether.h>
 #endif
@@ -151,8 +136,8 @@ typedef unsigned long UINT32_t;
 #define ETH_PPPOE_SESSION   0x8864
 
 /* But some brain-dead peers disobey the RFC, so frame types are variables */
-extern UINT16_t Eth_PPPOE_Discovery;
-extern UINT16_t Eth_PPPOE_Session;
+extern uint16_t Eth_PPPOE_Discovery;
+extern uint16_t Eth_PPPOE_Session;
 
 extern void switchToRealID(void);
 extern void switchToEffectiveID(void);
@@ -264,8 +249,8 @@ typedef struct PPPoETagStruct {
 #define READ_CHUNK 4096
 
 /* Function passed to parsePacket */
-typedef void ParseFunc(UINT16_t type,
-		       UINT16_t len,
+typedef void ParseFunc(uint16_t type,
+		       uint16_t len,
 		       unsigned char *data,
 		       void *extra);
 
@@ -285,7 +270,7 @@ typedef struct PPPoEConnectionStruct {
     unsigned char req_peer;     /* require mac addr to match req_peer_mac */
 #endif
 
-    UINT16_t session;		/* Session ID */
+    uint16_t session;		/* Session ID */
     char *ifName;		/* Interface name */
     char *serviceName;		/* Desired service name, if any */
     char *acName;		/* Desired AC name, if any */
@@ -319,8 +304,8 @@ struct PacketCriteria {
 };
 
 /* Function Prototypes */
-UINT16_t etherType(PPPoEPacket *packet);
-int openInterface(char const *ifname, UINT16_t type, unsigned char *hwaddr, UINT16_t *mtu);
+uint16_t etherType(PPPoEPacket *packet);
+int openInterface(char const *ifname, uint16_t type, unsigned char *hwaddr, uint16_t *mtu);
 int sendPacket(PPPoEConnection *conn, int sock, PPPoEPacket *pkt, int size);
 int receivePacket(int sock, PPPoEPacket *pkt, int *size);
 void fatalSys(char const *str);
@@ -332,8 +317,8 @@ void dumpPacket(FILE *fp, PPPoEPacket *packet, char const *dir);
 void dumpHex(FILE *fp, unsigned char const *buf, int len);
 #endif
 int parsePacket(PPPoEPacket *packet, ParseFunc *func, void *extra);
-void parseLogErrs(UINT16_t typ, UINT16_t len, unsigned char *data, void *xtra);
-void pktLogErrs(char const *pkt, UINT16_t typ, UINT16_t len, unsigned char *data, void *xtra);
+void parseLogErrs(uint16_t typ, uint16_t len, unsigned char *data, void *xtra);
+void pktLogErrs(char const *pkt, uint16_t typ, uint16_t len, unsigned char *data, void *xtra);
 void syncReadFromPPP(PPPoEConnection *conn, PPPoEPacket *packet);
 void asyncReadFromPPP(PPPoEConnection *conn, PPPoEPacket *packet);
 void asyncReadFromEth(PPPoEConnection *conn, int sock, int clampMss);
@@ -346,10 +331,10 @@ void sendSessionPacket(PPPoEConnection *conn,
 		       PPPoEPacket *packet, int len);
 void initPPP(void);
 void clampMSS(PPPoEPacket *packet, char const *dir, int clampMss);
-UINT16_t computeTCPChecksum(unsigned char *ipHdr, unsigned char *tcpHdr);
-UINT16_t pppFCS16(UINT16_t fcs, unsigned char *cp, int len);
+uint16_t computeTCPChecksum(unsigned char *ipHdr, unsigned char *tcpHdr);
+uint16_t pppFCS16(uint16_t fcs, unsigned char *cp, int len);
 void discovery(PPPoEConnection *conn);
-unsigned char *findTag(PPPoEPacket *packet, UINT16_t tagType,
+unsigned char *findTag(PPPoEPacket *packet, uint16_t tagType,
 		       PPPoETag *tag);
 
 #define SET_STRING(var, val) do { if (var) free(var); var = strDup(val); } while(0);

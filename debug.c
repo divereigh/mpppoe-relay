@@ -99,7 +99,7 @@ dumpPacket(FILE *fp, PPPoEPacket *packet, char const *dir)
     struct tm *lt;
     char timebuf[256];
 
-    UINT16_t type = etherType(packet);
+    uint16_t type = etherType(packet);
     if (!fp) return;
     gettimeofday(&tv, NULL);
     now = (time_t) tv.tv_sec;

@@ -442,7 +442,7 @@ initRelay(int nsess)
 
     /* Initialize session numbers which we hand out */
     for (i=0; i<MaxSessions; i++) {
-	AllSessions[i].sesNum = htons((UINT16_t) i+1);
+	AllSessions[i].sesNum = htons((uint16_t) i+1);
     }
 
     /* Initialize hashes in a linked list */
@@ -476,7 +476,7 @@ createSession(PPPoEInterface const *ac,
 	      PPPoEInterface const *cli,
 	      unsigned char const *acMac,
 	      unsigned char const *cliMac,
-	      UINT16_t acSes)
+	      uint16_t acSes)
 {
     PPPoESession *sess;
     SessionHash *acHash, *cliHash;
@@ -651,7 +651,7 @@ addHash(SessionHash *sh)
 * hash values.
 ***********************************************************************/
 unsigned int
-hash(unsigned char const *mac, UINT16_t sesNum)
+hash(unsigned char const *mac, uint16_t sesNum)
 {
     unsigned int ans1 =
 	((unsigned int) mac[0]) |
@@ -674,7 +674,7 @@ hash(unsigned char const *mac, UINT16_t sesNum)
 * The session hash for peer address "mac", session number sesNum
 ***********************************************************************/
 SessionHash *
-findSession(unsigned char const *mac, UINT16_t sesNum)
+findSession(unsigned char const *mac, uint16_t sesNum)
 {
     unsigned int b = hash(mac, sesNum) % HASHTAB_SIZE;
     SessionHash *sh = Buckets[b];
@@ -1475,7 +1475,7 @@ relayHandlePADS(PPPoEInterface const *iface,
 ***********************************************************************/
 void
 relaySendError(unsigned char code,
-	       UINT16_t session,
+	       uint16_t session,
 	       PPPoEInterface const *iface,
 	       unsigned char const *mac,
 	       PPPoETag const *hostUniq,

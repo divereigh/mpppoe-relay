@@ -106,8 +106,8 @@ static int bpfOffset = 0;		/* Current offset in bpfBuffer */
 /* Initialize frame types to RFC 2516 values.  Some broken peers apparently
    use different frame types... sigh... */
 
-UINT16_t Eth_PPPOE_Discovery = ETH_PPPOE_DISCOVERY;
-UINT16_t Eth_PPPOE_Session   = ETH_PPPOE_SESSION;
+uint16_t Eth_PPPOE_Discovery = ETH_PPPOE_DISCOVERY;
+uint16_t Eth_PPPOE_Session   = ETH_PPPOE_SESSION;
 
 /**********************************************************************
 *%FUNCTION: etherType
@@ -124,10 +124,10 @@ UINT16_t Eth_PPPOE_Session   = ETH_PPPOE_SESSION;
 * with the rest of this file.  See the BSD section of "pppoe.h" for
 * translations of the data structure names.
 ***********************************************************************/
-UINT16_t
+uint16_t
 etherType(PPPoEPacket *packet)
 {
-    UINT16_t type = (UINT16_t) ntohs(packet->ethHdr.h_proto);
+    uint16_t type = (uint16_t) ntohs(packet->ethHdr.h_proto);
     if (type != Eth_PPPOE_Discovery && type != Eth_PPPOE_Session) {
 	syslog(LOG_ERR, "Invalid ether type 0x%x", type);
     }
@@ -203,7 +203,7 @@ getHWaddr(int sock, char const *ifname, unsigned char *hwaddr)
 * Initializes the packet filter rules.
 ***********************************************************************/
 void
-initFilter(int fd, UINT16_t type, unsigned char *hwaddr)
+initFilter(int fd, uint16_t type, unsigned char *hwaddr)
 {
     /* Packet Filter Instructions:
      * Note that the ethernet type names come from "pppoe.h" and are
@@ -274,7 +274,7 @@ initFilter(int fd, UINT16_t type, unsigned char *hwaddr)
 * traffic on this network.
 ***********************************************************************/
 int
-openInterface(char const *ifname, UINT16_t type, unsigned char *hwaddr)
+openInterface(char const *ifname, uint16_t type, unsigned char *hwaddr)
 {
     static int fd = -1;
     char bpfName[32];
@@ -419,7 +419,7 @@ openInterface(char const *ifname, UINT16_t type, unsigned char *hwaddr)
 * Opens a raw Ethernet socket
 ***********************************************************************/
 int
-openInterface(char const *ifname, UINT16_t type, unsigned char *hwaddr, UINT16_t *mtu)
+openInterface(char const *ifname, uint16_t type, unsigned char *hwaddr, uint16_t *mtu)
 {
     int optval=1;
     int fd;
@@ -709,7 +709,7 @@ receivePacket(int sock, PPPoEPacket *pkt, int *size)
 * Opens a raw Ethernet socket
 ***********************************************************************/
 int
-openInterface(char const *ifname, UINT16_t type, unsigned char *hwaddr)
+openInterface(char const *ifname, uint16_t type, unsigned char *hwaddr)
 {
     int fd;
     long buf[MAXDLBUF];

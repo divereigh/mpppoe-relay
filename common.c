@@ -21,7 +21,7 @@ static char const RCSID[] =
 #define _ISOC99_SOURCE 1
 
 /* For seteuid prototype */
-#define _BSD_SOURCE 1
+#define _DEFAULT_SOURCE 1
 
 #include "pppoe.h"
 
@@ -63,9 +63,9 @@ static uid_t saved_gid = (uid_t) -2;
 int
 parsePacket(PPPoEPacket *packet, ParseFunc *func, void *extra)
 {
-    UINT16_t len = ntohs(packet->length);
+    uint16_t len = ntohs(packet->length);
     unsigned char *curTag;
-    UINT16_t tagType, tagLen;
+    uint16_t tagType, tagLen;
 
     if (packet->ver != 1) {
 	syslog(LOG_ERR, "Invalid PPPoE version (%d)", (int) packet->ver);
@@ -86,10 +86,10 @@ parsePacket(PPPoEPacket *packet, ParseFunc *func, void *extra)
     curTag = packet->payload;
     while(curTag - packet->payload < len) {
 	/* Alignment is not guaranteed, so do this by hand... */
-	tagType = (((UINT16_t) curTag[0]) << 8) +
-	    (UINT16_t) curTag[1];
-	tagLen = (((UINT16_t) curTag[2]) << 8) +
-	    (UINT16_t) curTag[3];
+	tagType = (((uint16_t) curTag[0]) << 8) +
+	    (uint16_t) curTag[1];
+	tagLen = (((uint16_t) curTag[2]) << 8) +
+	    (uint16_t) curTag[3];
 	if (tagType == TAG_END_OF_LIST) {
 	    return 0;
 	}
@@ -116,11 +116,11 @@ parsePacket(PPPoEPacket *packet, ParseFunc *func, void *extra)
 * Looks for a specific tag type.
 ***********************************************************************/
 unsigned char *
-findTag(PPPoEPacket *packet, UINT16_t type, PPPoETag *tag)
+findTag(PPPoEPacket *packet, uint16_t type, PPPoETag *tag)
 {
-    UINT16_t len = ntohs(packet->length);
+    uint16_t len = ntohs(packet->length);
     unsigned char *curTag;
-    UINT16_t tagType, tagLen;
+    uint16_t tagType, tagLen;
 
     if (packet->ver != 1) {
 	syslog(LOG_ERR, "Invalid PPPoE version (%d)", (int) packet->ver);
@@ -141,10 +141,10 @@ findTag(PPPoEPacket *packet, UINT16_t type, PPPoETag *tag)
     curTag = packet->payload;
     while(curTag - packet->payload < len) {
 	/* Alignment is not guaranteed, so do this by hand... */
-	tagType = (((UINT16_t) curTag[0]) << 8) +
-	    (UINT16_t) curTag[1];
-	tagLen = (((UINT16_t) curTag[2]) << 8) +
-	    (UINT16_t) curTag[3];
+	tagType = (((uint16_t) curTag[0]) << 8) +
+	    (uint16_t) curTag[1];
+	tagLen = (((uint16_t) curTag[2]) << 8) +
+	    (uint16_t) curTag[3];
 	if (tagType == TAG_END_OF_LIST) {
 	    return NULL;
 	}
@@ -280,12 +280,12 @@ strDup(char const *str)
 *%RETURNS:
 * The computed TCP checksum
 ***********************************************************************/
-UINT16_t
+uint16_t
 computeTCPChecksum(unsigned char *ipHdr, unsigned char *tcpHdr)
 {
-    UINT32_t sum = 0;
-    UINT16_t count = ipHdr[2] * 256 + ipHdr[3];
-    UINT16_t tmp;
+    uint32_t sum = 0;
+    uint16_t count = ipHdr[2] * 256 + ipHdr[3];
+    uint16_t tmp;
 
     unsigned char *addr = tcpHdr;
     unsigned char pseudoHeader[12];
@@ -300,17 +300,17 @@ computeTCPChecksum(unsigned char *ipHdr, unsigned char *tcpHdr)
     pseudoHeader[11] = (count & 0xFF);
 
     /* Checksum the pseudo-header */
-    sum += * (UINT16_t *) pseudoHeader;
-    sum += * ((UINT16_t *) (pseudoHeader+2));
-    sum += * ((UINT16_t *) (pseudoHeader+4));
-    sum += * ((UINT16_t *) (pseudoHeader+6));
-    sum += * ((UINT16_t *) (pseudoHeader+8));
-    sum += * ((UINT16_t *) (pseudoHeader+10));
+    sum += * (uint16_t *) pseudoHeader;
+    sum += * ((uint16_t *) (pseudoHeader+2));
+    sum += * ((uint16_t *) (pseudoHeader+4));
+    sum += * ((uint16_t *) (pseudoHeader+6));
+    sum += * ((uint16_t *) (pseudoHeader+8));
+    sum += * ((uint16_t *) (pseudoHeader+10));
 
     /* Checksum the TCP header and data */
     while (count > 1) {
 	memcpy(&tmp, addr, sizeof(tmp));
-	sum += (UINT32_t) tmp;
+	sum += (uint32_t) tmp;
 	addr += sizeof(tmp);
 	count -= sizeof(tmp);
     }
@@ -321,7 +321,7 @@ computeTCPChecksum(unsigned char *ipHdr, unsigned char *tcpHdr)
     while(sum >> 16) {
 	sum = (sum & 0xffff) + (sum >> 16);
     }
-    return (UINT16_t) ((~sum) & 0xFFFF);
+    return (uint16_t) ((~sum) & 0xFFFF);
 }
 
 /**********************************************************************
@@ -343,7 +343,7 @@ clampMSS(PPPoEPacket *packet, char const *dir, int clampMss)
     unsigned char *opt;
     unsigned char *endHdr;
     unsigned char *mssopt = NULL;
-    UINT16_t csum;
+    uint16_t csum;
 
     int len, minlen;
 
@@ -474,7 +474,7 @@ clampMSS(PPPoEPacket *packet, char const *dir, int clampMss)
     tcpHdr[16] = 0;
     tcpHdr[17] = 0;
     csum = computeTCPChecksum(ipHdr, tcpHdr);
-    (* (UINT16_t *) (tcpHdr+16)) = csum;
+    (* (uint16_t *) (tcpHdr+16)) = csum;
 }
 
 /***********************************************************************
@@ -493,7 +493,7 @@ sendPADT(PPPoEConnection *conn, char const *msg)
     PPPoEPacket packet;
     unsigned char *cursor = packet.payload;
 
-    UINT16_t plen = 0;
+    uint16_t plen = 0;
 
     /* Do nothing if no session established yet */
     if (!conn->session) return;
@@ -608,7 +608,7 @@ sendPADTf(PPPoEConnection *conn, char const *fmt, ...)
 ***********************************************************************/
 void
 pktLogErrs(char const *pkt,
-	   UINT16_t type, UINT16_t len, unsigned char *data,
+	   uint16_t type, uint16_t len, unsigned char *data,
 	   void *extra)
 {
     char const *str;
@@ -642,7 +642,7 @@ pktLogErrs(char const *pkt,
 * Picks error tags out of a packet and logs them.
 ***********************************************************************/
 void
-parseLogErrs(UINT16_t type, UINT16_t len, unsigned char *data,
+parseLogErrs(uint16_t type, uint16_t len, unsigned char *data,
 	     void *extra)
 {
     pktLogErrs("PADT", type, len, data, extra);
