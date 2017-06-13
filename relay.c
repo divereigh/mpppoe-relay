@@ -47,6 +47,14 @@ static char const RCSID[] =
 #include <unistd.h>
 #endif
 
+#ifdef HAVE_FCNTL_H
+#include <fcntl.h>
+#endif
+
+#ifdef HAVE_SYS_WAIT_H
+#include <sys/wait.h>
+#endif
+
 
 /* Interfaces (max MAX_INTERFACES) */
 PPPoEInterface Interfaces[MAX_INTERFACES];
@@ -327,34 +335,27 @@ main(int argc, char *argv[])
     /* Allocate memory for sessions, etc. */
     initRelay(nsess);
 
-    /* Daemonize -- UNIX Network Programming, Vol. 1, Stevens */
     if (beDaemon) {
-	int i;
-	i = fork();
-	if (i < 0) {
-	    fatalSys("fork");
-	} else if (i != 0) {
-	    /* parent */
-	    exit(0);
-	}
-	setsid();
-	signal(SIGHUP, SIG_IGN);
-	i = fork();
-	if (i < 0) {
-	    fatalSys("fork");
-	} else if (i != 0) {
-	    exit(0);
-	}
+	if (fork()==0) {
+		close(0);
+		close(1);
+		close(2);
+		open("/dev/null", O_RDWR);
+		open("/dev/null", O_RDWR);
+		open("/dev/null", O_RDWR);
+		setsid();
 
-	chdir("/");
-	closelog();
-	for (i=0; i<CLOSEFD; i++) {
-	    if (!keepDescriptor(i)) {
-		close(i);
-	    }
+		syslog(LOG_DAEMON, "mpppman watcher started");
+		/* Now fork again, to create a watcher */
+		while (fork()!=0) {
+			int status;
+			wait(&status);
+			syslog(LOG_DAEMON, "mpppoe-relay exited status: %d", status);
+			sleep(2); // So we don't spin
+		}
+	} else {
+		exit(0);
 	}
-	/* We nuked our syslog descriptor... */
-	openlog("pppoe-relay", LOG_PID, LOG_DAEMON);
     }
 
 #if 0
