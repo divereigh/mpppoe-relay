@@ -37,8 +37,8 @@ typedef struct SessionStruct {
     struct SessionStruct *prev;	/* Free list link */
     struct SessionPeerStruct *acPeer; /* Peer for AC MAC/Session */
     struct SessionPeerStruct *clientPeer; /* Peer for client MAC/Session */
-    unsigned int epoch;		/* Epoch when last activity was seen */
     uint16_t sesNum;		/* Session number assigned by relay */
+    unsigned int start;		/* Start time */
 } PPPoESession;
 
 /* Hash table entry to find sessions */
@@ -49,6 +49,7 @@ typedef struct SessionPeerStruct {
     PPPoEInterface const *interface;	/* Interface */
     unsigned char peerMac[ETH_ALEN]; /* Peer's MAC address */
     uint16_t sesNum;		/* Session number */
+    unsigned int epoch;		/* Epoch when last inbound activity was seen */
     PPPoESession *ses;		/* Session data */
 } SessionPeer;
 
@@ -59,6 +60,7 @@ void relayGotDiscoveryPacket(PPPoEInterface const *i);
 PPPoEInterface *findInterface(int sock);
 unsigned int hash(unsigned char const *mac, uint16_t sesNum);
 SessionPeer *findSession(unsigned char const *mac, uint16_t sesNum);
+SessionPeer *findDupSession(unsigned char const *mac, PPPoEInterface const *iface);
 void deleteHash(SessionPeer *hash);
 PPPoESession *createSession(PPPoEInterface const *ac,
 			    PPPoEInterface const *cli,
@@ -72,6 +74,8 @@ void initRelay(int nsess);
 void relayLoop(void);
 void addHash(SessionPeer *sh);
 void unhash(SessionPeer *sh);
+void freeSessionPeer(SessionPeer *sh);
+SessionPeer *allocSessionPeer();
 
 void relayHandlePADT(PPPoEInterface const *iface, PPPoEPacket *packet, int size);
 void relayHandlePADI(PPPoEInterface const *iface, PPPoEPacket *packet, int size);
@@ -93,6 +97,7 @@ void relaySendError(unsigned char code,
 
 void alarmHandler(int sig);
 void cleanSessions(void);
+void PPPoE_cb_func(evutil_socket_t fd, short what, void *arg);
 
 #define MAX_INTERFACES 8
 #define DEFAULT_SESSIONS 8

@@ -62,21 +62,24 @@ PPPoESession *ActiveSessions;
 SessionPeer *AllHashes;
 SessionPeer *FreeHashes;
 SessionPeer *ActiveHashes;
-SessionPeer *Buckets[HASHTAB_SIZE];
+// SessionPeer *Buckets[HASHTAB_SIZE];
 
 volatile unsigned int Epoch = 0;
 volatile unsigned int CleanCounter = 0;
 
 /* How often to clean up stale sessions? */
-#define MIN_CLEAN_PERIOD 30  /* Minimum period to run cleaner */
-#define TIMEOUT_DIVISOR 20   /* How often to run cleaner per timeout period */
+#define MIN_CLEAN_PERIOD 5  /* Minimum period to run cleaner */
+#define TIMEOUT_DIVISOR 1   /* How often to run cleaner per timeout period */
 unsigned int CleanPeriod = MIN_CLEAN_PERIOD;
 
 /* How long a session can be idle before it is cleaned up? */
 unsigned int IdleTimeout = MIN_CLEAN_PERIOD * TIMEOUT_DIVISOR;
 
+struct event *cleanTimer;
+#if 0
 /* Pipe for breaking select() to initiate periodic cleaning */
 int CleanPipe[2];
+#endif
 
 /* Our relay: if_index followed by peer_mac */
 #define MY_RELAY_TAG_LEN (sizeof(int) + ETH_ALEN)
@@ -95,7 +98,9 @@ static int
 keepDescriptor(int fd)
 {
     int i;
+#if 0
     if (fd == CleanPipe[0] || fd == CleanPipe[1]) return 1;
+#endif
     for (i=0; i<NumInterfaces; i++) {
 	if (fd == Interfaces[i].discoverySock ||
 	    fd == Interfaces[i].sessionSock) return 1;
@@ -302,11 +307,14 @@ main(int argc, char *argv[])
 	exit(EXIT_FAILURE);
     }
 
+#if 0
     /* Make a pipe for the cleaner */
     if (pipe(CleanPipe) < 0) {
 	fatalSys("pipe");
     }
+#endif
 
+#if 0
     /* Set up alarm handler */
     sa.sa_handler = alarmHandler;
     sigemptyset(&sa.sa_mask);
@@ -314,6 +322,7 @@ main(int argc, char *argv[])
     if (sigaction(SIGALRM, &sa, NULL) < 0) {
 	fatalSys("sigaction");
     }
+#endif
 
     /* Allocate memory for sessions, etc. */
     initRelay(nsess);
@@ -348,8 +357,12 @@ main(int argc, char *argv[])
 	openlog("pppoe-relay", LOG_PID, LOG_DAEMON);
     }
 
+#if 0
     /* Kick off SIGALRM if there is an idle timeout */
     if (IdleTimeout) alarm(1);
+#endif
+    cleanTimer=newTimer(PPPoE_cb_func, NULL);
+    startTimer(cleanTimer, 1);
 
     /* Enter the relay loop */
     // relayLoop();
@@ -377,6 +390,7 @@ PPPoE_cb_func(evutil_socket_t fd, short what, void *arg)
 	// int s;
 	const PPPoEInterface *pppoe = (PPPoEInterface *) arg;
 
+#if 0
         syslog(LOG_INFO, "Got an event on socket %d:%s%s%s%s %s\n",
 		(int) fd,
 		(what&EV_TIMEOUT) ? " timeout" : "",
@@ -384,10 +398,16 @@ PPPoE_cb_func(evutil_socket_t fd, short what, void *arg)
 		(what&EV_WRITE)   ? " write" : "",
 		(what&EV_SIGNAL)  ? " signal" : "",
 		pppoe->name);
-	if (fd==pppoe->discoverySock) {
-		relayGotDiscoveryPacket(pppoe);
-	} else if (fd==pppoe->sessionSock) {
-		relayGotSessionPacket(pppoe);
+#endif
+	if (what&EV_TIMEOUT) {
+    		startTimer(cleanTimer, 1);
+		cleanSessions();
+	} else if (what&EV_READ) {
+		if (fd==pppoe->discoverySock) {
+			relayGotDiscoveryPacket(pppoe);
+		} else if (fd==pppoe->sessionSock) {
+			relayGotSessionPacket(pppoe);
+		}
 	}
 #if 0
 	time(&time_now);
@@ -503,6 +523,60 @@ initRelay(int nsess)
     AllHashes[2*MaxSessions-1].next = NULL;
 
     FreeHashes = AllHashes;
+    ActiveHashes = NULL;
+}
+
+/**********************************************************************
+*%FUNCTION: allocSessionPeer
+*%ARGUMENTS:
+*%RETURNS:
+* SessionPeer structure; NULL if one could not be allocated
+*%DESCRIPTION:
+* Fetches a free SessionPeer
+***********************************************************************/
+SessionPeer *
+allocSessionPeer()
+{
+    SessionPeer *sh;
+    sh=FreeHashes;
+    if (sh) {
+    	FreeHashes=sh->next;
+	sh->next=ActiveHashes;
+	if (sh->next) {
+		sh->next->prev=sh;
+	}
+	sh->prev=NULL;
+	ActiveHashes=sh;
+    }
+    return(sh);
+}
+
+
+/**********************************************************************
+*%FUNCTION: freeSessionPeer
+*%ARGUMENTS:
+* sh - SessionPeer
+*%RETURNS:
+*%DESCRIPTION:
+* Frees a SessionPeer
+***********************************************************************/
+void
+freeSessionPeer(SessionPeer *sh)
+{
+    // Take ourselves out of the linked list
+    if (sh->prev) {
+	sh->prev->next = sh->next;
+    } else {
+	ActiveHashes = sh->next;
+    }
+    if (sh->next) {
+	sh->next->prev = sh->prev;
+    }
+
+    bzero(sh, sizeof(*sh));
+    /* Add to free list (singly-linked) */
+    sh->next = FreeHashes;
+    FreeHashes = sh;
 }
 
 /**********************************************************************
@@ -546,18 +620,20 @@ createSession(PPPoEInterface const *ac,
     ActiveSessions = sess;
     sess->prev = NULL;
 
-    sess->epoch = Epoch;
+    sess->start = Epoch;
 
     /* Get two hash entries */
-    acPeer = FreeHashes;
-    cliPeer = acPeer->next;
-    FreeHashes = cliPeer->next;
+    acPeer = allocSessionPeer();
+    cliPeer = allocSessionPeer();
 
     acPeer->peer = cliPeer;
     cliPeer->peer = acPeer;
 
     sess->acPeer = acPeer;
     sess->clientPeer = cliPeer;
+
+    acPeer->epoch = Epoch;
+    cliPeer->epoch = Epoch;
 
     acPeer->interface = ac;
     cliPeer->interface = cli;
@@ -650,6 +726,7 @@ freeSession(PPPoESession *ses, char const *msg)
 void
 unhash(SessionPeer *sh)
 {
+#if 0
     unsigned int b = hash(sh->peerMac, sh->sesNum) % HASHTAB_SIZE;
     if (sh->prev) {
 	sh->prev->next = sh->next;
@@ -664,6 +741,9 @@ unhash(SessionPeer *sh)
     /* Add to free list (singly-linked) */
     sh->next = FreeHashes;
     FreeHashes = sh;
+#endif
+
+    freeSessionPeer(sh);
 }
 
 /**********************************************************************
@@ -678,6 +758,7 @@ unhash(SessionPeer *sh)
 void
 addHash(SessionPeer *sh)
 {
+#if 0
     unsigned int b = hash(sh->peerMac, sh->sesNum) % HASHTAB_SIZE;
     sh->next = Buckets[b];
     sh->prev = NULL;
@@ -685,6 +766,7 @@ addHash(SessionPeer *sh)
 	sh->next->prev = sh;
     }
     Buckets[b] = sh;
+#endif
 }
 
 /**********************************************************************
@@ -721,8 +803,29 @@ hash(unsigned char const *mac, uint16_t sesNum)
 * The session hash for peer address "mac", session number sesNum
 ***********************************************************************/
 SessionPeer *
+findDupSession(unsigned char const *mac, PPPoEInterface const *iface)
+{
+    SessionPeer *sh;
+    for (sh=ActiveHashes; sh; sh=sh->next) {
+	if (NOT_ALL_ZERO(sh->peerMac) && iface==sh->interface) {
+		return(sh);
+	}
+    }
+    return(NULL);
+}
+
+/**********************************************************************
+*%FUNCTION: findSession
+*%ARGUMENTS:
+* mac -- an Ethernet address
+* sesNum -- a session number
+*%RETURNS:
+* The session hash for peer address "mac", session number sesNum
+***********************************************************************/
+SessionPeer *
 findSession(unsigned char const *mac, uint16_t sesNum)
 {
+#if 0
     unsigned int b = hash(mac, sesNum) % HASHTAB_SIZE;
     SessionPeer *sh = Buckets[b];
     while(sh) {
@@ -730,6 +833,15 @@ findSession(unsigned char const *mac, uint16_t sesNum)
 	    return sh;
 	}
 	sh = sh->next;
+    }
+    return NULL;
+#endif
+
+    SessionPeer *sh;
+    for (sh=ActiveHashes; sh; sh=sh->next) {
+	if (!memcmp(mac, sh->peerMac, ETH_ALEN) && sesNum == sh->sesNum) {
+		return(sh);
+	}
     }
     return NULL;
 }
@@ -785,6 +897,7 @@ rp_fatal(char const *str)
     exit(EXIT_FAILURE);
 }
 
+#if 0
 /**********************************************************************
 *%FUNCTION: relayLoop
 *%ARGUMENTS:
@@ -850,6 +963,7 @@ relayLoop()
 	}
     }
 }
+#endif
 
 /**********************************************************************
 *%FUNCTION: relayGotDiscoveryPacket
@@ -967,7 +1081,7 @@ relayGotSessionPacket(PPPoEInterface const *iface)
 
     /* Relay it */
     ses = sh->ses;
-    ses->epoch = Epoch;
+    sh->epoch = Epoch;
     sh = sh->peer;
     packet.session = sh->sesNum;
     memcpy(packet.ethHdr.h_source, sh->interface->mac, ETH_ALEN);
@@ -1002,8 +1116,8 @@ relayHandlePADT(PPPoEInterface const *iface,
     SessionPeer *sh;
     PPPoESession *ses;
 
-    /* Destination address must be interface's MAC address */
-    if (memcmp(packet->ethHdr.h_dest, iface->mac, ETH_ALEN)) {
+    /* Destination address must be interface's MAC address - or all zero (MT BUG) */
+    if (memcmp(packet->ethHdr.h_dest, iface->mac, ETH_ALEN) && NOT_ALL_ZERO(packet->ethHdr.h_dest)) {
 	return;
     }
 
@@ -1011,6 +1125,17 @@ relayHandlePADT(PPPoEInterface const *iface,
     if (!sh) {
 	return;
     }
+
+    syslog(LOG_INFO,
+    	"PADT packet from %02x:%02x:%02x:%02x:%02x:%02x on interface %s Relay-Session-Id tag %d\n",
+	       packet->ethHdr.h_source[0],
+	       packet->ethHdr.h_source[1],
+	       packet->ethHdr.h_source[2],
+	       packet->ethHdr.h_source[3],
+	       packet->ethHdr.h_source[4],
+	       packet->ethHdr.h_source[5],
+	       iface->name, packet->session);
+
     /* Relay the PADT to the peer */
     sh = sh->peer;
     ses = sh->ses;
@@ -1111,6 +1236,7 @@ relayHandlePADI(PPPoEInterface const *iface,
     for (i=0; i < NumInterfaces; i++) {
 	if (iface == &Interfaces[i]) continue;
 	if (!Interfaces[i].acOK) continue;
+	if (findDupSession(NULL, &Interfaces[i])) continue;
 	memcpy(packet->ethHdr.h_source, Interfaces[i].mac, ETH_ALEN);
 	sendPacket(NULL, Interfaces[i].discoverySock, packet, size);
     }
@@ -1455,11 +1581,33 @@ relayHandlePADS(PPPoEInterface const *iface,
        Just relay it; do not create a session */
     if (packet->session != htons(0)) {
 	/* Check for duplicate session */
-#if 0
+
+	syslog(LOG_INFO, "PADS packet from %02x:%02x:%02x:%02x:%02x:%02x on interface %s Relay-Session-Id tag %d\n",
+	       packet->ethHdr.h_source[0],
+	       packet->ethHdr.h_source[1],
+	       packet->ethHdr.h_source[2],
+	       packet->ethHdr.h_source[3],
+	       packet->ethHdr.h_source[4],
+	       packet->ethHdr.h_source[5],
+	       iface->name, packet->session);
+
 	if (findDupSession(packet->ethHdr.h_source, iface)) {
-		printf("Ignore duplicate session\n");
+		PPPoETag hostUniq, *hu;
+		if (findTag(packet, TAG_HOST_UNIQ, &hostUniq)) {
+		    hu = &hostUniq;
+		} else {
+		    hu = NULL;
+		}
+		// printf("Ignore duplicate session\n");
+		relaySendError(CODE_PADS, htons(0), &Interfaces[ifIndex],
+			       loc + TAG_HDR_SIZE + sizeof(ifIndex),
+			       hu, "RP-PPPoE: Relay: duplicate session");
+		relaySendError(CODE_PADT, packet->session, iface,
+			       packet->ethHdr.h_source, NULL,
+			       "RP-PPPoE: Relay: duplicate session");
+		return;
 	}
-#endif
+
 	/* Check for existing session */
 	sh = findSession(packet->ethHdr.h_source, packet->session);
 	if (sh) ses = sh->ses;
@@ -1538,6 +1686,16 @@ relaySendError(unsigned char code,
     PPPoETag errTag;
     int size;
 
+    syslog(LOG_INFO, "relaySendError: %s packet to %02x:%02x:%02x:%02x:%02x:%02x on interface %s: msg=%s\n",
+	       (code==CODE_PADT) ? "PADT" : "PADS",
+	       mac[0],
+	       mac[1],
+	       mac[2],
+	       mac[3],
+	       mac[4],
+	       mac[5],
+	       iface->name, errMsg);
+
     memcpy(packet.ethHdr.h_source, iface->mac, ETH_ALEN);
     memcpy(packet.ethHdr.h_dest, mac, ETH_ALEN);
     packet.ethHdr.h_proto = htons(Eth_PPPOE_Discovery);
@@ -1554,13 +1712,14 @@ relaySendError(unsigned char code,
     strcpy((char *) errTag.payload, errMsg);
     if (addTag(&packet, &errTag) < 0) return;
     size = ntohs(packet.length) + HDR_SIZE;
-    if (code == CODE_PADT) {
+//    if (code == CODE_PADT) {
 	sendPacket(NULL, iface->discoverySock, &packet, size);
-    } else {
-	sendPacket(NULL, iface->sessionSock, &packet, size);
-    }
+//    } else {
+//	sendPacket(NULL, iface->sessionSock, &packet, size);
+//    }
 }
 
+#if 0
 /**********************************************************************
 *%FUNCTION: alarmHandler
 *%ARGUMENTS:
@@ -1581,6 +1740,7 @@ alarmHandler(int sig)
 	write(CleanPipe[1], "", 1);
     }
 }
+#endif
 
 /**********************************************************************
 *%FUNCTION: cleanSessions
@@ -1594,21 +1754,27 @@ alarmHandler(int sig)
 ***********************************************************************/
 void cleanSessions(void)
 {
-    PPPoESession *cur, *next;
-    cur = ActiveSessions;
+    SessionPeer *cur, *next;
+    cur = ActiveHashes;
+    Epoch++;
     while(cur) {
 	next = cur->next;
+	// printf("cleanSessions %s called: Idle %d\n", cur->interface->name, Epoch - cur->epoch);
 	if (Epoch - cur->epoch > IdleTimeout) {
 	    /* Send PADT to each peer */
-	    relaySendError(CODE_PADT, cur->acPeer->sesNum,
-			   cur->acPeer->interface,
-			   cur->acPeer->peerMac, NULL,
-			   "RP-PPPoE: Relay: Session exceeded idle timeout");
-	    relaySendError(CODE_PADT, cur->clientPeer->sesNum,
-			   cur->clientPeer->interface,
-			   cur->clientPeer->peerMac, NULL,
-			   "RP-PPPoE: Relay: Session exceeded idle timeout");
-	    freeSession(cur, "Idle Timeout");
+	    PPPoESession *ses=cur->ses;
+	    if (Epoch - ses->start > 60) { 
+		    /* Don't do this in the first 60 seconds after the session has started */
+		    relaySendError(CODE_PADT, ses->acPeer->sesNum,
+				   ses->acPeer->interface,
+				   ses->acPeer->peerMac, NULL,
+				   "RP-PPPoE: Relay: Session exceeded idle timeout");
+		    relaySendError(CODE_PADT, ses->clientPeer->sesNum,
+				   ses->clientPeer->interface,
+				   ses->clientPeer->peerMac, NULL,
+				   "RP-PPPoE: Relay: Session exceeded idle timeout");
+		    freeSession(ses, "Idle Timeout");
+	    }
 	}
 	cur = next;
     }
