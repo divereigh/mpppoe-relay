@@ -1,5 +1,5 @@
 ##############################################
-# OpenWrt Makefile for mpppman program
+# OpenWrt Makefile for mpppoe-relay program
 #
 #
 # Most of the variables used here are defined in
@@ -38,14 +38,14 @@ include $(INCLUDE_DIR)/package.mk
 # If you are running Kamikaze, delete the DESCRIPTION 
 # variable below and uncomment the Kamikaze define
 # directive for the description below
-define Package/mpppman
+define Package/mpppoe-relay
 	SECTION:=utils
 	CATEGORY:=Utilities
 	DEPENDS:=+libevent2
 	TITLE:=mpppoe-relay -- Manage multilink pppoe sessions
 endef
 
-define Package/mpppman/description
+define Package/mpppoe-relay/description
 	Manage multilink pppoe sessions
 endef
 
@@ -68,13 +68,13 @@ endef
 
 
 # Specify where and how to install the program. Since we only have one file, 
-# the mpppman executable, install it by copying it to the /bin directory on
+# the mpppoe-relay executable, install it by copying it to the /bin directory on
 # the router. The $(1) variable represents the root directory on the router running 
 # OpenWrt. The $(INSTALL_DIR) variable contains a command to prepare the install 
 # directory if it does not already exist.  Likewise $(INSTALL_BIN) contains the 
 # command to copy the binary file from its current location (in our case the build
 # directory) to the install directory.
-define Package/mpppman/install
+define Package/mpppoe-relay/install
 	$(INSTALL_DIR) $(1)/bin
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/mpppoe-relay $(1)/bin/
 endef
@@ -84,4 +84,4 @@ endef
 # The above define directives specify all the information needed, but this
 # line calls BuildPackage which in turn actually uses this information to
 # build a package.
-$(eval $(call BuildPackage,mpppman))
+$(eval $(call BuildPackage,mpppoe-relay))
